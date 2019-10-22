@@ -62,10 +62,12 @@ pub type Hash = primitives::H256;
 pub type DigestItem = generic::DigestItem<Hash>;
 
 /// Used for the module template in `./template.rs`
-mod template;
+//mod template;
 
 /// Used for the module nft in `./nft.rs`
 mod nft;
+
+mod linked_item;
 
 
 /// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
@@ -256,12 +258,13 @@ impl sudo::Trait for Runtime {
 }
 
 /// Used for the module template in `./template.rs`
-impl template::Trait for Runtime {
-	type Event = Event;
-}
+// impl template::Trait for Runtime {
+// 	type Event = Event;
+// }
 
 impl nft::Trait for Runtime {
 	type Event = Event;
+	type TokenId = u64;
 }
 
 construct_runtime!(
@@ -278,9 +281,9 @@ construct_runtime!(
 		Balances: balances::{default, Error},
 		Sudo: sudo,
 		// Used for the module template in `./template.rs`
-		TemplateModule: template::{Module, Call, Storage, Event<T>},
+		//TemplateModule: template::{Module, Call, Storage, Event<T>},
 		// Substrate NFT module
-		NFT: nft::{Module, Storage, Call, Event<T>},
+		Nft: nft::{Module, Storage, Call, Config, Event<T>},
 	}
 );
 

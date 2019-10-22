@@ -1,7 +1,7 @@
 use primitives::{Pair, Public};
 use substrate_nft_runtime::{
 	AccountId, BabeConfig, BalancesConfig, GenesisConfig, GrandpaConfig,
-	SudoConfig, IndicesConfig, SystemConfig, WASM_BINARY, 
+	SudoConfig, IndicesConfig, SystemConfig, NftConfig, WASM_BINARY, 
 };
 use babe_primitives::{AuthorityId as BabeId};
 use grandpa_primitives::{AuthorityId as GrandpaId};
@@ -40,6 +40,7 @@ pub fn get_authority_keys_from_seed(seed: &str) -> (AccountId, AccountId, Grandp
 		get_from_seed::<BabeId>(seed),
 	)
 }
+
 
 impl Alternative {
 	/// Get an actual chain config from one of the alternatives.
@@ -138,6 +139,10 @@ fn testnet_genesis(initial_authorities: Vec<(AccountId, AccountId, GrandpaId, Ba
 		}),
 		grandpa: Some(GrandpaConfig {
 			authorities: initial_authorities.iter().map(|x| (x.2.clone(), 1)).collect(),
+		}),
+		nft: Some(NftConfig {
+			symbol: String::from("NFT").into_bytes(),
+			name: String::from("Non-Fungible Token").into_bytes()
 		}),
 	}
 }
