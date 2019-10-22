@@ -109,6 +109,29 @@ decl_module! {
 			Self::deposit_event(RawEvent::SomethingStored(something, who));
 			Ok(())
 		}
+
+		// transfer
+		fn transfer_from(origin, from: T::AccountId, to: T::AccountId, token_id: T::TokenId) -> Result {
+			let sender = ensure_signed(origin)?;
+
+			// token owner check
+
+			// do transfer
+			Self::do_transfer(from, to, token_id)?;
+
+			Ok(())
+		}
+
+		// safe transfer
+		fn safe_transfer_from(origin, from: T::AccountId, to: T::AccountId, token_id: T::TokenId) -> Result {
+
+			// check balance
+
+			// transfer
+			Self::transfer_from(origin, from, to, token_id)?;
+
+			Ok(())
+		}
 	}
 }
 
@@ -123,6 +146,15 @@ decl_event!(
 		SomethingStored(u32, AccountId),
 	}
 );
+
+impl<T: Trait> Module<T> {
+	
+	fn do_transfer(from: T::AccountId, to: T::AccountId, token_id: T::TokenId) -> Result {
+		
+		Ok(())
+	}
+
+}
 
 /// tests for this module
 #[cfg(test)]
