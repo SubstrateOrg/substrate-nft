@@ -8,8 +8,11 @@
 /// For more guidance on Substrate modules, see the example module
 /// https://github.com/paritytech/substrate/blob/master/srml/example/src/lib.rs
 
-use support::{decl_module, decl_storage, decl_event, StorageValue, dispatch::Result};
+use support::{decl_module, decl_storage, decl_event, Parameter, StorageMap, StorageValue, dispatch::Result};
+use sr_primitives::traits::{SimpleArithmetic, Bounded, Member};
 use system::ensure_signed;
+use rstd::vec::Vec;
+use crate::linked_item::{LinkedList, LinkedItem};
 
 /// The module's configuration trait.
 pub trait Trait: system::Trait {
@@ -17,15 +20,69 @@ pub trait Trait: system::Trait {
 
 	/// The overarching event type.
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
+	
+	type TokenId: Parameter + Member + SimpleArithmetic + Bounded + Default + Copy;
 }
+
+type TokenLinkedItem<T> = LinkedItem<<T as Trait>::TokenId>;
+type OwnerToTokenList<T> = LinkedList<OwnerToToken<T>, <T as system::Trait>::AccountId, <T as Trait>::TokenId>;
 
 // This module's storage items.
 decl_storage! {
-	trait Store for Module<T: Trait> as TemplateModule {
-		// Just a dummy storage item.
-		// Here we are declaring a StorageValue, `Something` as a Option<u32>
-		// `get(something)` is the default getter which returns either the stored `u32` or `None` if nothing stored
+	trait Store for Module<T: Trait> as Nft {
+		
+		//#region ERC-721 metadata extension
+
+		/// 代币符号，默认NFT，Bytes存储
+		pub Symbol get(symbol)  config(): Vec<u8>;
+
+		/// 代币名称，默认Non-Fungible Token，Bytes存储
+		pub Name get(name)  config(): Vec<u8>;
+
+		/// 代币元数据uri
+		pub TokenURI get(token_uri): map T::TokenId => Vec<u8>;
+
+		//#endregion
+
+
+		//#region ERC-721 compliant contract
+
+		/// TokenId到账户的Map，用于保存、查找和修改Token持有人
+		pub TokenToOwner get(owner_of): map T::TokenId => T::AccountId;
+
+		/// 账户到余额的Map，用于保存和查询账户持有Token数量
+		pub OwnerCount get(balance_of): map T::AccountId => T::TokenId;
+
+		/// Token到授权账户的Map，用于保存和查询对单个Token的授权
+		pub TokenToApproval get(get_approved): map T::TokenId => Option<T::AccountId>;
+
+		/// 一个账户对另一个账户是否授权的Map，用于保存和查询对一个账户对另一个账户的授权
+		pub OwnerToOperator get(is_approved_for_all): map (T::AccountId, T::AccountId) => bool;
+
+		//#endregion ERC721标准
+
+
+		//#region ERC-721 enumeration extension
+		/// Token总发行量
+		pub TotalSupply get(total_supply): T::TokenId;
+
+		/// TokenId即TokenIndex，无需获取
+		//pub TokenByIndex get(token_by_index): T::TokenId => T::TokenId;
+
+		/// TokenId即TokenIndex，无需获取
+		//pub TokenOfOwnerByIndex get(token_of_owner_by_index): map (T::AccountId, T::TokenId) => T::TokenId;
+		//#endregion
+
+
+		//#region 其他索引
+		/// 持有人和持有Token到链表的Map，用于查询持有人下的所有Token，并支持O(1)复杂度的修改持有人
+		pub OwnerToToken get(owner_to_token): map (T::AccountId, Option<T::TokenId>) => Option<TokenLinkedItem<T>>;
+
+		//endregion
+
+		//#region Just for Demo
 		Something get(something): Option<u32>;
+		//#endregion
 	}
 }
 
@@ -56,7 +113,10 @@ decl_module! {
 }
 
 decl_event!(
-	pub enum Event<T> where AccountId = <T as system::Trait>::AccountId {
+	pub enum Event<T> where 
+		AccountId = <T as system::Trait>::AccountId
+		//TokenId = <T as system::Trait>::TokenId
+	{
 		// Just a dummy event.
 		// Event `Something` is declared with a parameter of the type `u32` and `AccountId`
 		// To emit this event, we call the deposit funtion, from our runtime funtions
@@ -71,7 +131,7 @@ mod tests {
 
 	use runtime_io::with_externalities;
 	use primitives::{H256, Blake2Hasher};
-	use support::{impl_outer_origin, assert_ok, parameter_types};
+	use support::{impl_outer_origin, parameter_types};
 	use sr_primitives::{traits::{BlakeTwo256, IdentityLookup}, testing::Header};
 	use sr_primitives::weights::Weight;
 	use sr_primitives::Perbill;
@@ -83,7 +143,7 @@ mod tests {
 	// For testing the module, we construct most of a mock runtime. This means
 	// first constructing a configuration type (`Test`) which `impl`s each of the
 	// configuration traits of modules we want to use.
-	#[derive(Clone, Eq, PartialEq)]
+	#[derive(Clone, Eq, PartialEq, Debug)]
 	pub struct Test;
 	parameter_types! {
 		pub const BlockHashCount: u64 = 250;
@@ -110,9 +170,10 @@ mod tests {
 		type Version = ();
 	}
 	impl Trait for Test {
+		type TokenId = u32;
 		type Event = ();
 	}
-	type TemplateModule = Module<Test>;
+	type OwnerToTokenTest = OwnerToToken<Test>;
 
 	// This function basically just builds a genesis storage key/value store according to
 	// our desired mockup.
@@ -121,13 +182,116 @@ mod tests {
 	}
 
 	#[test]
-	fn it_works_for_default_value() {
+	fn owne_to_token_can_append_values() {
 		with_externalities(&mut new_test_ext(), || {
-			// Just a dummy test for the dummy funtion `do_something`
-			// calling the `do_something` function with a value 42
-			assert_ok!(TemplateModule::do_something(Origin::signed(1), 42));
-			// asserting that the stored value is equal to what we stored
-			assert_eq!(TemplateModule::something(), Some(42));
+			OwnerToTokenList::<Test>::append(&0, 1);
+
+			assert_eq!(OwnerToTokenTest::get(&(0, None)), Some(TokenLinkedItem::<Test> {
+				prev: Some(1),
+				next: Some(1),
+			}));
+
+			assert_eq!(OwnerToTokenTest::get(&(0, Some(1))), Some(TokenLinkedItem::<Test> {
+				prev: None,
+				next: None,
+			}));
+
+			OwnerToTokenList::<Test>::append(&0, 2);
+
+			assert_eq!(OwnerToTokenTest::get(&(0, None)), Some(TokenLinkedItem::<Test> {
+				prev: Some(2),
+				next: Some(1),
+			}));
+
+			assert_eq!(OwnerToTokenTest::get(&(0, Some(1))), Some(TokenLinkedItem::<Test> {
+				prev: None,
+				next: Some(2),
+			}));
+
+			assert_eq!(OwnerToTokenTest::get(&(0, Some(2))), Some(TokenLinkedItem::<Test> {
+				prev: Some(1),
+				next: None,
+			}));
+
+			OwnerToTokenList::<Test>::append(&0, 3);
+
+			assert_eq!(OwnerToTokenTest::get(&(0, None)), Some(TokenLinkedItem::<Test> {
+				prev: Some(3),
+				next: Some(1),
+			}));
+
+			assert_eq!(OwnerToTokenTest::get(&(0, Some(1))), Some(TokenLinkedItem::<Test> {
+				prev: None,
+				next: Some(2),
+			}));
+
+			assert_eq!(OwnerToTokenTest::get(&(0, Some(2))), Some(TokenLinkedItem::<Test> {
+				prev: Some(1),
+				next: Some(3),
+			}));
+
+			assert_eq!(OwnerToTokenTest::get(&(0, Some(3))), Some(TokenLinkedItem::<Test> {
+				prev: Some(2),
+				next: None,
+			}));
+		});
+	}
+
+	#[test]
+	fn owne_to_token_can_remove_values() {
+		with_externalities(&mut new_test_ext(), || {
+			OwnerToTokenList::<Test>::append(&0, 1);
+			OwnerToTokenList::<Test>::append(&0, 2);
+			OwnerToTokenList::<Test>::append(&0, 3);
+
+			OwnerToTokenList::<Test>::remove(&0, 2);
+
+			assert_eq!(OwnerToTokenTest::get(&(0, None)), Some(TokenLinkedItem::<Test> {
+				prev: Some(3),
+				next: Some(1),
+			}));
+
+			assert_eq!(OwnerToTokenTest::get(&(0, Some(1))), Some(TokenLinkedItem::<Test> {
+				prev: None,
+				next: Some(3),
+			}));
+
+			assert_eq!(OwnerToTokenTest::get(&(0, Some(2))), None);
+
+			assert_eq!(OwnerToTokenTest::get(&(0, Some(3))), Some(TokenLinkedItem::<Test> {
+				prev: Some(1),
+				next: None,
+			}));
+
+			OwnerToTokenList::<Test>::remove(&0, 1);
+
+			assert_eq!(OwnerToTokenTest::get(&(0, None)), Some(TokenLinkedItem::<Test> {
+				prev: Some(3),
+				next: Some(3),
+			}));
+
+			assert_eq!(OwnerToTokenTest::get(&(0, Some(1))), None);
+
+			assert_eq!(OwnerToTokenTest::get(&(0, Some(2))), None);
+
+			assert_eq!(OwnerToTokenTest::get(&(0, Some(3))), Some(TokenLinkedItem::<Test> {
+				prev: None,
+				next: None,
+			}));
+
+			OwnerToTokenList::<Test>::remove(&0, 3);
+
+			assert_eq!(OwnerToTokenTest::get(&(0, None)), Some(TokenLinkedItem::<Test> {
+				prev: None,
+				next: None,
+			}));
+
+			assert_eq!(OwnerToTokenTest::get(&(0, Some(1))), None);
+
+			assert_eq!(OwnerToTokenTest::get(&(0, Some(2))), None);
+
+			assert_eq!(OwnerToTokenTest::get(&(0, Some(2))), None);
 		});
 	}
 }
+
