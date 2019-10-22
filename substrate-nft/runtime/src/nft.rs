@@ -8,7 +8,7 @@
 /// For more guidance on Substrate modules, see the example module
 /// https://github.com/paritytech/substrate/blob/master/srml/example/src/lib.rs
 
-use support::{decl_module, decl_storage, decl_event, Parameter, StorageMap, StorageValue, dispatch::Result};
+use support::{decl_module, decl_storage, decl_event, Parameter, StorageMap, StorageValue, dispatch::Result, ensure};
 use sr_primitives::traits::{SimpleArithmetic, Bounded, Member};
 use system::ensure_signed;
 use rstd::vec::Vec;
@@ -115,9 +115,10 @@ decl_module! {
 			let sender = ensure_signed(origin)?;
 
 			// token owner check
+  			ensure!(<OwnerToToken<T>>::exists(&(sender.clone(), Some(token_id))), "Only owner can transfer token");
 
 			// do transfer
-			Self::do_transfer(from, to, token_id)?;
+			Self::do_transfer(&from, &to, token_id)?;
 
 			Ok(())
 		}
@@ -149,8 +150,11 @@ decl_event!(
 
 impl<T: Trait> Module<T> {
 	
-	fn do_transfer(from: T::AccountId, to: T::AccountId, token_id: T::TokenId) -> Result {
-		
+	fn do_transfer(from: &T::AccountId, to: &T::AccountId, token_id: T::TokenId) -> Result {
+		<OwnerToTokenList<T>>::remove(&from, token_id);
+		<OwnerToTokenList<T>>::append(&to, token_id);
+		<TokenToOwner<T>>::insert(token_id, to);
+
 		Ok(())
 	}
 
