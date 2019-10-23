@@ -48,7 +48,7 @@ decl_storage! {
 		//#region ERC-721 compliant contract
 
 		/// TokenId到账户的Map，用于保存、查找和修改Token持有人
-		pub TokenToOwner get(owner_of): map T::TokenId => Option<T::AccountId>;
+		pub TokenToOwner get(owner_of): map T::TokenId => T::AccountId;
 
 		/// 账户到余额的Map，用于保存和查询账户持有Token数量
 		pub OwnerCount get(balance_of): map T::AccountId => T::TokenId;
@@ -151,30 +151,22 @@ decl_event!(
 );
 
 impl<T: Trait> Module<T> {
+	fn is_approved_or_owner(spender: T::AccountId, token_id: T::TokenId) -> bool {		
+        let owner = Self::owner_of(token_id);
+		let approved_as_owner = owner == spender;
 
-	fn is_approved_or_owner(spender: T::AccountId, token_id: T::TokenId) -> bool {
-        //let owner = Self::owner_of(token_id);
+        let approved_as_delegate = match Some(owner) {
+            Some(d) => Self::is_approved_for_all((d, spender.clone())),
+            None => false,
+        };
 
-		// //let is_owner = <OwnerToToken<T>>::exists(&(spender.clone(), Some(token_id)));
-        // let approved_as_owner = match owner {
-        //     Some(ref o) => o == &spender,
-        //     None => false,
-        // };
+        let approved_user = Self::get_approved(token_id);
+        let approved_as_user = match approved_user {
+            Some(u) => u == spender,
+            None => false,
+        };
 
-        // let approved_as_delegate = match owner {
-        //     Some(d) => Self::is_approved_for_all((d, spender.clone())),
-        //     None => false,
-        // };
-
-        //let approved_user = Self::get_approved(token_id);
-        // let approved_as_user = match approved_user {
-        //     Some(u) => u == spender,
-        //     None => false,
-        // };
-
-		// return approved_as_owner || approved_as_delegate || approved_as_user
-
-		return true
+		return approved_as_owner || approved_as_delegate || approved_as_user
     }
 	
 	fn do_transfer(from: &T::AccountId, to: &T::AccountId, token_id: T::TokenId) -> Result {
