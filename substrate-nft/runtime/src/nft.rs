@@ -92,6 +92,7 @@ decl_module! {
 	pub struct Module<T: Trait> for enum Call where origin: T::Origin {
 		// Initializing events
 		// this is needed only if you are using events in your module
+		//fn deposit_event<T>() = default;
 		fn deposit_event() = default;
 
 		// Just a dummy entry point.
@@ -113,26 +114,20 @@ decl_module! {
 		// transfer
 		fn transfer_from(origin, from: T::AccountId, to: T::AccountId, token_id: T::TokenId) -> Result {
 			let sender = ensure_signed(origin)?;
-
 			// token owner check
-  			//ensure!(<OwnerToToken<T>>::exists(&(sender.clone(), Some(token_id))), "Only owner can transfer token");
-
-			ensure!(Self::is_approved_or_owner(sender, token_id), "You do not own this token approve");
-
+			ensure!(Self::is_approved_or_owner(sender.clone(), token_id), "You do not own this token auth");
 			// do transfer
 			Self::do_transfer(&from, &to, token_id)?;
-
+			Self::deposit_event(RawEvent::Transfer(sender, to, token_id));
 			Ok(())
 		}
 
 		// safe transfer
 		fn safe_transfer_from(origin, from: T::AccountId, to: T::AccountId, token_id: T::TokenId) -> Result {
-
 			// check balance
 
 			// transfer
 			Self::transfer_from(origin, from, to, token_id)?;
-
 			Ok(())
 		}
 	}
@@ -140,27 +135,33 @@ decl_module! {
 
 decl_event!(
 	pub enum Event<T> where 
-		AccountId = <T as system::Trait>::AccountId
-		//TokenId = <T as system::Trait>::TokenId
+		AccountId = <T as system::Trait>::AccountId,
+		TokenId = <T as Trait>::TokenId,
 	{
 		// Just a dummy event.
 		// Event `Something` is declared with a parameter of the type `u32` and `AccountId`
 		// To emit this event, we call the deposit funtion, from our runtime funtions
 		SomethingStored(u32, AccountId),
+
+		Transfer(AccountId, AccountId, TokenId),
 	}
 );
 
 impl<T: Trait> Module<T> {
 	fn is_approved_or_owner(spender: T::AccountId, token_id: T::TokenId) -> bool {		
         let owner = Self::owner_of(token_id);
-		let approved_as_owner = owner == spender;
+        let approved_user = Self::get_approved(token_id);
+
+        let approved_as_owner = match Some(owner.clone()) {
+            Some(ref o) => o == &spender,
+            None => false,
+        };
 
         let approved_as_delegate = match Some(owner) {
             Some(d) => Self::is_approved_for_all((d, spender.clone())),
             None => false,
         };
 
-        let approved_user = Self::get_approved(token_id);
         let approved_as_user = match approved_user {
             Some(u) => u == spender,
             None => false,
@@ -173,7 +174,6 @@ impl<T: Trait> Module<T> {
 		<OwnerToTokenList<T>>::remove(&from, token_id);
 		<OwnerToTokenList<T>>::append(&to, token_id);
 		<TokenToOwner<T>>::insert(token_id, to);
-
 		Ok(())
 	}
 
