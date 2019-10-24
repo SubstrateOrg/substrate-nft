@@ -186,7 +186,7 @@ mod tests {
 
 	use runtime_io::with_externalities;
 	use primitives::{H256, Blake2Hasher};
-	use support::{impl_outer_origin, parameter_types};
+	use support::{impl_outer_origin, parameter_types, assert_ok};
 	use sr_primitives::{traits::{BlakeTwo256, IdentityLookup}, testing::Header};
 	use sr_primitives::weights::Weight;
 	use sr_primitives::Perbill;
@@ -228,6 +228,8 @@ mod tests {
 		type TokenId = u32;
 		type Event = ();
 	}
+	
+	type TemplateModule = Module<Test>;
 	type OwnerToTokenTest = OwnerToToken<Test>;
 
 	// This function basically just builds a genesis storage key/value store according to
