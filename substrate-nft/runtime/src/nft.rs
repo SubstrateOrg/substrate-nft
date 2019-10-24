@@ -218,6 +218,12 @@ mod tests {
 		pub const MaximumBlockWeight: Weight = 1024;
 		pub const MaximumBlockLength: u32 = 2 * 1024;
 		pub const AvailableBlockRatio: Perbill = Perbill::from_percent(75);
+
+		pub const ExistentialDeposit: u64 = 0;
+        pub const TransferFee: u64 = 0;
+        pub const CreationFee: u64 = 0;
+        pub const TransactionBaseFee: u64 = 0;
+        pub const TransactionByteFee: u64 = 0;
 	}
 	impl system::Trait for Test {
 		type Origin = Origin;
@@ -237,14 +243,6 @@ mod tests {
 		type AvailableBlockRatio = AvailableBlockRatio;
 		type Version = ();
 	}
-
-    parameter_types! {
-        pub const ExistentialDeposit: u64 = 0;
-        pub const TransferFee: u64 = 0;
-        pub const CreationFee: u64 = 0;
-        pub const TransactionBaseFee: u64 = 0;
-        pub const TransactionByteFee: u64 = 0;
-    }
 	impl balances::Trait for Test {
         type Balance = u64;
         type OnFreeBalanceZero = ();
@@ -396,7 +394,7 @@ mod tests {
 			let from = 1;
 			let to = 2;
 			let token_id = 0;
-			
+
 			/*  // 重写
 			<TokenToOwner<Test>>::insert(token_id, from);
 			assert_ok!(TemplateModule::transfer_from(Origin::signed(from), from, to, token_id));
