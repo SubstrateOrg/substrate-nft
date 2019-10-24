@@ -114,8 +114,11 @@ decl_module! {
 		// transfer
 		fn transfer_from(origin, from: T::AccountId, to: T::AccountId, token_id: T::TokenId) -> Result {
 			let sender = ensure_signed(origin)?;
-			// token owner check
-			ensure!(Self::is_approved_or_owner(sender.clone(), token_id), "You do not own this token auth");
+			let token_owner = Self::owner_of(token_id);
+			let approved_account = Self::get_approved(token_id);
+			let is_approved_or_owner = from == token_owner || from == approved_account.unwrap() || Self::is_approved_for_all((sender.clone(), from.clone()));
+			ensure!(is_approved_or_owner, "You do not own this token auth");
+
 			// do transfer
 			Self::do_transfer(&from, &to, token_id)?;
 			Self::deposit_event(RawEvent::Transfer(sender, to, token_id));
@@ -148,35 +151,12 @@ decl_event!(
 );
 
 impl<T: Trait> Module<T> {
-	fn is_approved_or_owner(spender: T::AccountId, token_id: T::TokenId) -> bool {		
-        let owner = Self::owner_of(token_id);
-        let approved_user = Self::get_approved(token_id);
-
-        let approved_as_owner = match Some(owner.clone()) {
-            Some(ref o) => o == &spender,
-            None => false,
-        };
-
-        let approved_as_delegate = match Some(owner) {
-            Some(d) => Self::is_approved_for_all((d, spender.clone())),
-            None => false,
-        };
-
-        let approved_as_user = match approved_user {
-            Some(u) => u == spender,
-            None => false,
-        };
-
-		return approved_as_owner || approved_as_delegate || approved_as_user
-    }
-	
 	fn do_transfer(from: &T::AccountId, to: &T::AccountId, token_id: T::TokenId) -> Result {
 		<OwnerToTokenList<T>>::remove(&from, token_id);
 		<OwnerToTokenList<T>>::append(&to, token_id);
 		<TokenToOwner<T>>::insert(token_id, to);
 		Ok(())
 	}
-
 }
 
 /// tests for this module
@@ -228,7 +208,7 @@ mod tests {
 		type TokenId = u32;
 		type Event = ();
 	}
-	
+
 	type TemplateModule = Module<Test>;
 	type OwnerToTokenTest = OwnerToToken<Test>;
 
@@ -355,12 +335,19 @@ mod tests {
 	fn owne_to_token_can_transfer_from() {
 		with_externalities(&mut new_test_ext(), || {
 			let from = 1;
-			let origin = Origin::signed(from);
 			let to = 2;
 			let token_id = 0;
 
 			<TokenToOwner<Test>>::insert(token_id, from);
-			assert_ok!(TemplateModule::transfer_from(origin, from, to, token_id));
+			assert_ok!(TemplateModule::transfer_from(Origin::signed(from), from, to, token_id));
+
+			let token_approve_account = 3;
+			<TokenToApproval<Test>>::insert(token_id, token_approve_account);
+			assert_ok!(TemplateModule::transfer_from(Origin::signed(from), token_approve_account, to, token_id));
+
+			let account_approve_account = 4;
+			<OwnerToOperator<Test>>::insert((from, account_approve_account), true);
+			assert_ok!(TemplateModule::transfer_from(Origin::signed(from), account_approve_account, to, token_id));
 		});
 	}
 
