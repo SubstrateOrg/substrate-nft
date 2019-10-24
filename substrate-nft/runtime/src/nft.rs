@@ -30,7 +30,6 @@ pub trait Trait: system::Trait {
 
 type TokenLinkedItem<T> = LinkedItem<<T as Trait>::TokenId>;
 type OwnerToTokenList<T> = LinkedList<OwnerToToken<T>, <T as system::Trait>::AccountId, <T as Trait>::TokenId>;
-//type BalanceOf<T> = <<T as Trait>::Currency as Currency<<T as system::Trait>::AccountId>>::Balance;
 
 // This module's storage items.
 decl_storage! {
@@ -56,7 +55,8 @@ decl_storage! {
 		pub TokenToOwner get(owner_of): map T::TokenId => T::AccountId;
 
 		/// 账户到余额的Map，用于保存和查询账户持有Token数量
-		pub OwnerCount get(balance_of): map T::AccountId => T::TokenId;
+		//pub OwnerCount get(balance_of): map T::AccountId => T::TokenId;  // how to transfer int type to T::TokenId type? eg: String, Hash
+		pub OwnerCount get(balance_of): map T::AccountId => u64;
 
 		/// Token到授权账户的Map，用于保存和查询对单个Token的授权
 		pub TokenToApproval get(get_approved): map T::TokenId => Option<T::AccountId>;
@@ -158,11 +158,36 @@ decl_event!(
 
 impl<T: Trait> Module<T> {
 	fn do_transfer(from: &T::AccountId, to: &T::AccountId, token_id: T::TokenId) -> Result {
+		// update balance
+		let from_balance = Self::balance_of(from);
+        let to_balance = Self::balance_of(to);
+		let new_from_balance = match from_balance.checked_sub(1) {
+            Some (c) => c,
+            None => return Err("from account balance sub error"),
+        };
+        let new_to_balance = match to_balance.checked_add(1) {
+            Some(c) => c,
+            None => return Err("to account balance add error"),
+        };
+        <OwnerCount<T>>::insert(from, new_from_balance);
+        <OwnerCount<T>>::insert(to, new_to_balance);
+
+		// token approve remove
+		Self::approval_clear(token_id)?;
+
+		// token transfer
 		<OwnerToTokenList<T>>::remove(&from, token_id);
-		<OwnerToTokenList<T>>::append(&to, token_id);
+		<OwnerToTokenList<T>>::append(&to, token_id);  
+
+		// update token -- owner
 		<TokenToOwner<T>>::insert(token_id, to);
 		Ok(())
 	}
+
+	fn approval_clear(token_id: T::TokenId) -> Result { 
+		<TokenToApproval<T>>::remove(token_id);
+        Ok(())
+    }
 }
 
 /// tests for this module
