@@ -124,7 +124,7 @@ decl_module! {
 
 		// safe transfer
 		fn safe_transfer_from(origin, from: T::AccountId, to: T::AccountId, token_id: T::TokenId) -> Result {
-			// check balance
+			// check to account balance is_zero
 
 			// transfer
 			Self::transfer_from(origin, from, to, token_id)?;
@@ -346,6 +346,32 @@ mod tests {
 			assert_eq!(OwnerToTokenTest::get(&(0, Some(2))), None);
 
 			assert_eq!(OwnerToTokenTest::get(&(0, Some(2))), None);
+		});
+	}
+
+	#[test]
+	fn owne_to_token_can_transfer_from() {
+		with_externalities(&mut new_test_ext(), || {
+			let from = 1;
+			let origin = Origin::signed(from);
+			let to = 2;
+			let token_id = 0;
+
+			<TokenToOwner<Test>>::insert(token_id, from);
+			assert_ok!(TemplateModule::transfer_from(origin, from, to, token_id));
+		});
+	}
+
+	#[test]
+	fn owne_to_token_can_safe_transfer_from() {
+		with_externalities(&mut new_test_ext(), || {
+			let from = 1;
+			let origin = Origin::signed(from);
+			let to = 2;
+			let token_id = 0;
+
+			<TokenToOwner<Test>>::insert(token_id, from);
+			assert_ok!(TemplateModule::safe_transfer_from(origin, from, to, token_id));
 		});
 	}
 }
