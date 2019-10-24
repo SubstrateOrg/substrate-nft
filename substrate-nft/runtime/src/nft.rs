@@ -8,8 +8,10 @@
 /// For more guidance on Substrate modules, see the example module
 /// https://github.com/paritytech/substrate/blob/master/srml/example/src/lib.rs
 
-use support::{decl_module, decl_storage, decl_event, Parameter, StorageMap, StorageValue, dispatch::Result, ensure};
-use sr_primitives::traits::{SimpleArithmetic, Bounded, Member};
+use support::{decl_module, decl_storage, decl_event, Parameter, StorageMap, StorageValue, 
+	dispatch::Result, ensure, traits::Currency
+};
+use sr_primitives::traits::{SimpleArithmetic, Bounded, Member, Zero};
 use system::ensure_signed;
 use rstd::vec::Vec;
 use crate::linked_item::{LinkedList, LinkedItem};
@@ -22,10 +24,13 @@ pub trait Trait: system::Trait {
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 	
 	type TokenId: Parameter + Member + SimpleArithmetic + Bounded + Default + Copy;
+
+	type Currency: Currency<Self::AccountId>;
 }
 
 type TokenLinkedItem<T> = LinkedItem<<T as Trait>::TokenId>;
 type OwnerToTokenList<T> = LinkedList<OwnerToToken<T>, <T as system::Trait>::AccountId, <T as Trait>::TokenId>;
+//type BalanceOf<T> = <<T as Trait>::Currency as Currency<<T as system::Trait>::AccountId>>::Balance;
 
 // This module's storage items.
 decl_storage! {
@@ -128,7 +133,8 @@ decl_module! {
 		// safe transfer
 		fn safe_transfer_from(origin, from: T::AccountId, to: T::AccountId, token_id: T::TokenId) -> Result {
 			// check to account balance is_zero
-
+			let balances = T::Currency::free_balance(&to);
+            ensure!(!balances.is_zero(), "to account balances is zero");
 			// transfer
 			Self::transfer_from(origin, from, to, token_id)?;
 			Ok(())
