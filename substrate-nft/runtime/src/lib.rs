@@ -265,6 +265,7 @@ impl sudo::Trait for Runtime {
 impl nft::Trait for Runtime {
 	type Event = Event;
 	type TokenId = u64;
+	type Currency = Balances;
 }
 
 construct_runtime!(

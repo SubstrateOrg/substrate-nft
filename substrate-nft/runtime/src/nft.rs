@@ -7,9 +7,10 @@
 
 /// For more guidance on Substrate modules, see the example module
 /// https://github.com/paritytech/substrate/blob/master/srml/example/src/lib.rs
-
-use support::{decl_module, decl_storage, decl_event, Parameter, StorageMap, StorageValue, dispatch::Result, ensure};
-use sr_primitives::traits::{SimpleArithmetic, Bounded, Member};
+use support::{decl_module, decl_storage, decl_event, Parameter, StorageMap, StorageValue, 
+	dispatch::Result, ensure, traits::Currency
+};
+use sr_primitives::traits::{SimpleArithmetic, Bounded, Member, Zero, CheckedSub, CheckedAdd};
 use system::ensure_signed;
 use rstd::vec::Vec;
 use crate::linked_item::{LinkedList, LinkedItem};
@@ -20,9 +21,14 @@ pub trait Trait: system::Trait {
 
 	/// The overarching event type.
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
+	
+	//type TokenId: Parameter + Member + SimpleArithmetic + Bounded + Default + Copy;
+	type TokenId: Parameter + Member + SimpleArithmetic + Bounded + Default + Copy + Into<u64>;
 
-	type TokenId: Parameter + Member + SimpleArithmetic + Bounded + Default + Copy;
+	type Currency: Currency<Self::AccountId>;
 }
+
+//type BalanceOf<T> = <<T as Trait>::Currency as Currency<<T as system::Trait>::AccountId>>::Balance;
 
 type TokenLinkedItem<T> = LinkedItem<<T as Trait>::TokenId>;
 type OwnerToTokenList<T> = LinkedList<OwnerToToken<T>, <T as system::Trait>::AccountId, <T as Trait>::TokenId>;
@@ -88,6 +94,7 @@ decl_module! {
 	pub struct Module<T: Trait> for enum Call where origin: T::Origin {
 		// Initializing events
 		// this is needed only if you are using events in your module
+		//fn deposit_event<T>() = default;
 		fn deposit_event() = default;
 
 		fn approve(origin, to: T::AccountId, token_id: T::TokenId) {
@@ -105,6 +112,30 @@ decl_module! {
 			Self::do_appove_for_all(&sender, &to, approved);
 
 			Self::deposit_event(RawEvent::ApprovalForAll(sender, to, approved));
+		}
+
+		// transfer
+		fn transfer_from(origin, from: T::AccountId, to: T::AccountId, token_id: T::TokenId) -> Result {
+			let sender = ensure_signed(origin)?;
+			let token_owner = Self::owner_of(token_id);
+			let approved_account = Self::get_approved(token_id);
+			let is_approved_or_owner = from == token_owner || Some(from.clone()) == approved_account || Self::is_approved_for_all((sender.clone(), from.clone()));
+			ensure!(is_approved_or_owner, "You do not own this token auth");
+
+			// do transfer
+			Self::do_transfer(&token_owner, &to, token_id)?;
+			Self::deposit_event(RawEvent::Transfer(sender, to, token_id));
+			Ok(())
+		}
+
+		// safe transfer
+		fn safe_transfer_from(origin, from: T::AccountId, to: T::AccountId, token_id: T::TokenId) -> Result {
+			// check to account balance is_zero
+			let balances = T::Currency::free_balance(&to);
+            ensure!(!balances.is_zero(), "to account balances is zero");
+			// transfer
+			Self::transfer_from(origin, from, to, token_id)?;
+			Ok(())
 		}
 	}
 }
@@ -132,9 +163,46 @@ decl_event!(
 		TokenId = <T as Trait>::TokenId,
 	{
 		Approval(AccountId, AccountId, TokenId),
+
 		ApprovalForAll(AccountId, AccountId, bool),
+
+		Transfer(AccountId, AccountId, TokenId),
 	}
 );
+
+impl<T: Trait> Module<T> {
+	fn do_transfer(from: &T::AccountId, to: &T::AccountId, token_id: T::TokenId) -> Result {
+		// update balance
+		let from_balance = Self::balance_of(from);
+        let to_balance = Self::balance_of(to);
+		let new_from_balance = match from_balance.checked_sub(&1.into()) {
+            Some (c) => c,
+            None => return Err("from account balance sub error"),
+        };
+        let new_to_balance = match to_balance.checked_add(&1.into()) {
+            Some(c) => c,
+            None => return Err("to account balance add error"),
+        };
+        <OwnerCount<T>>::insert(from, new_from_balance);
+        <OwnerCount<T>>::insert(to, new_to_balance);
+
+		// token approve remove
+		Self::approval_clear(token_id)?;
+
+		// token transfer
+		<OwnerToTokenList<T>>::remove(&from, token_id);
+		<OwnerToTokenList<T>>::append(&to, token_id);  
+
+		// update token -- owner
+		<TokenToOwner<T>>::insert(token_id, to);
+		Ok(())
+	}
+
+	fn approval_clear(token_id: T::TokenId) -> Result { 
+		<TokenToApproval<T>>::remove(token_id);
+        Ok(())
+    }
+}
 
 /// tests for this module
 #[cfg(test)]
@@ -162,6 +230,12 @@ mod tests {
 		pub const MaximumBlockWeight: Weight = 1024;
 		pub const MaximumBlockLength: u32 = 2 * 1024;
 		pub const AvailableBlockRatio: Perbill = Perbill::from_percent(75);
+
+		pub const ExistentialDeposit: u64 = 0;
+        pub const TransferFee: u64 = 0;
+        pub const CreationFee: u64 = 0;
+        pub const TransactionBaseFee: u64 = 0;
+        pub const TransactionByteFee: u64 = 0;
 	}
 	impl system::Trait for Test {
 		type Origin = Origin;
@@ -181,18 +255,39 @@ mod tests {
 		type AvailableBlockRatio = AvailableBlockRatio;
 		type Version = ();
 	}
+	impl balances::Trait for Test {
+        type Balance = u64;
+        type OnFreeBalanceZero = ();
+        type OnNewAccount = ();
+        type Event = ();
+        type TransactionPayment = ();
+        type TransferPayment = ();
+        type DustRemoval = ();
+        type ExistentialDeposit = ExistentialDeposit;
+        type TransferFee = TransferFee;
+        type CreationFee = CreationFee;
+        type TransactionBaseFee = TransactionBaseFee;
+        type TransactionByteFee = TransactionByteFee;
+        type WeightToFee = ();
+    }
+
 	impl Trait for Test {
 		type TokenId = u32;
 		type Event = ();
+		type Currency = balances::Module<Test>;
 	}
 	type TemplateModule = Module<Test>;
 	type OwnerToTokenTest = OwnerToToken<Test>;
+	type Balances = balances::Module<Test>;
 
-	// This function basically just builds a genesis storage key/value store according to
-	// our desired mockup.
-	fn new_test_ext() -> runtime_io::TestExternalities<Blake2Hasher> {
-		system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
-	}
+    fn new_test_ext() -> runtime_io::TestExternalities<Blake2Hasher> {
+        let mut t = system::GenesisConfig::default().build_storage::<Test>().unwrap();
+        balances::GenesisConfig::<Test> {
+            balances: vec![(1, 10), (2, 20), (3, 30), (4, 40), (5, 50), (6, 60), (7, 10), (8, 10), (9, 10), (10, 20)],
+            vesting: vec![],
+        }.assimilate_storage(&mut t).unwrap();
+        t.into()
+    }
 
 	#[test]
 	fn token_to_approval_can_approve() {
@@ -338,6 +433,62 @@ mod tests {
 			assert_eq!(OwnerToTokenTest::get(&(0, Some(2))), None);
 
 			assert_eq!(OwnerToTokenTest::get(&(0, Some(2))), None);
+		});
+	}
+
+
+	#[test]
+	fn owne_to_token_can_transfer_from() {
+		with_externalities(&mut new_test_ext(), || {
+			{
+				let from1 = 1;
+				let to1 = 2;
+				let token_id1 = 1;
+				OwnerToTokenList::<Test>::append(&from1, token_id1);
+				<TokenToOwner<Test>>::insert(token_id1, from1);
+				<OwnerCount<Test>>::insert(from1, 1);
+				assert_ok!(TemplateModule::transfer_from(Origin::signed(from1), from1, to1, token_id1));
+			}
+
+			{
+				let from2 = 3;
+				let to2 = 4;
+				let token_id2 = 2;
+				let token_approve_account = 5;
+				OwnerToTokenList::<Test>::append(&from2, token_id2);
+				<TokenToOwner<Test>>::insert(token_id2, from2);
+				<OwnerCount<Test>>::insert(from2, 1);
+				<TokenToApproval<Test>>::insert(token_id2, token_approve_account);
+				assert_ok!(TemplateModule::transfer_from(Origin::signed(from2), token_approve_account, to2, token_id2));
+			}
+
+			{
+				let from3 = 6;
+				let to3 = 7;
+				let token_id3 = 3;
+				let account_approve_account = 8;
+				OwnerToTokenList::<Test>::append(&from3, token_id3);
+				<TokenToOwner<Test>>::insert(token_id3, from3);
+				<OwnerCount<Test>>::insert(from3, 1);
+				<OwnerToOperator<Test>>::insert((from3, account_approve_account), true);
+				assert_ok!(TemplateModule::transfer_from(Origin::signed(from3), account_approve_account, to3, token_id3));
+			}
+		});
+	}
+
+	#[test]
+	fn owne_to_token_can_safe_transfer_from() {
+		with_externalities(&mut new_test_ext(), || {
+			let from = 9;
+			let origin = Origin::signed(from);
+			let to = 10;
+			let token_id = 4;
+
+			OwnerToTokenList::<Test>::append(&from, token_id);
+			<TokenToOwner<Test>>::insert(token_id, from);
+			<OwnerCount<Test>>::insert(from, 1);
+			assert_eq!(Balances::free_balance(to), 20);
+			assert_ok!(TemplateModule::safe_transfer_from(origin, from, to, token_id));
 		});
 	}
 }
