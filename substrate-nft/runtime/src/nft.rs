@@ -7,7 +7,6 @@
 
 /// For more guidance on Substrate modules, see the example module
 /// https://github.com/paritytech/substrate/blob/master/srml/example/src/lib.rs
-
 use support::{decl_module, decl_storage, decl_event, Parameter, StorageMap, StorageValue, 
 	dispatch::Result, ensure, traits::Currency
 };
@@ -37,7 +36,7 @@ type OwnerToTokenList<T> = LinkedList<OwnerToToken<T>, <T as system::Trait>::Acc
 // This module's storage items.
 decl_storage! {
 	trait Store for Module<T: Trait> as Nft {
-		
+
 		//#region ERC-721 metadata extension
 
 		/// 代币符号，默认NFT，Bytes存储
@@ -86,10 +85,6 @@ decl_storage! {
 		pub OwnerToToken get(owner_to_token): map (T::AccountId, Option<T::TokenId>) => Option<TokenLinkedItem<T>>;
 
 		//endregion
-
-		//#region Just for Demo
-		Something get(something): Option<u32>;
-		//#endregion
 	}
 }
 
@@ -102,20 +97,21 @@ decl_module! {
 		//fn deposit_event<T>() = default;
 		fn deposit_event() = default;
 
-		// Just a dummy entry point.
-		// function that can be called by the external world as an extrinsics call
-		// takes a parameter of the type `AccountId`, stores it and emits an event
-		pub fn do_something(origin, something: u32) -> Result {
-			// TODO: You only need this if you want to check it was signed.
-			let who = ensure_signed(origin)?;
+		fn approve(origin, to: T::AccountId, token_id: T::TokenId) {
+			let sender = ensure_signed(origin)?;
 
-			// TODO: Code to execute when something calls this.
-			// For example: the following line stores the passed in u32 in the storage
-			Something::put(something);
+			Self::do_appove(&sender, &to, &token_id)?;
 
-			// here we are raising the Something event
-			Self::deposit_event(RawEvent::SomethingStored(something, who));
-			Ok(())
+			Self::deposit_event(RawEvent::Approval(sender, to, token_id));
+		}
+
+		fn set_approval_for_all(origin, to: T::AccountId, approved: bool) {
+			let sender = ensure_signed(origin)?;
+			ensure!(sender != to, "Can not approve to yourself");
+
+			Self::do_appove_for_all(&sender, &to, approved);
+
+			Self::deposit_event(RawEvent::ApprovalForAll(sender, to, approved));
 		}
 
 		// transfer
@@ -144,15 +140,31 @@ decl_module! {
 	}
 }
 
+impl<T: Trait> Module<T> {
+	fn do_appove(sender: &T::AccountId, to: &T::AccountId, token_id: &T::TokenId) -> Result {
+		let owner = Self::owner_of(token_id);
+
+		ensure!(&owner != to, "Can not approve to yourself");
+		ensure!(sender == &owner || Self::is_approved_for_all((owner, sender.clone())), "You do not have access for this token");
+
+		<TokenToApproval<T>>::insert(token_id, to);
+
+		Ok(())
+	}
+
+	fn do_appove_for_all(owner: &T::AccountId, to: &T::AccountId, approved: bool) {
+		<OwnerToOperator<T>>::insert((owner.clone(), to.clone()), approved);
+	}
+}
+
 decl_event!(
-	pub enum Event<T> where 
+	pub enum Event<T> where
 		AccountId = <T as system::Trait>::AccountId,
 		TokenId = <T as Trait>::TokenId,
 	{
-		// Just a dummy event.
-		// Event `Something` is declared with a parameter of the type `u32` and `AccountId`
-		// To emit this event, we call the deposit funtion, from our runtime funtions
-		SomethingStored(u32, AccountId),
+		Approval(AccountId, AccountId, TokenId),
+
+		ApprovalForAll(AccountId, AccountId, bool),
 
 		Transfer(AccountId, AccountId, TokenId),
 	}
@@ -199,7 +211,7 @@ mod tests {
 
 	use runtime_io::with_externalities;
 	use primitives::{H256, Blake2Hasher};
-	use support::{impl_outer_origin, parameter_types, assert_ok};
+	use support::{impl_outer_origin, assert_ok, assert_err, parameter_types};
 	use sr_primitives::{traits::{BlakeTwo256, IdentityLookup}, testing::Header};
 	use sr_primitives::weights::Weight;
 	use sr_primitives::Perbill;
@@ -264,7 +276,6 @@ mod tests {
 		type Event = ();
 		type Currency = balances::Module<Test>;
 	}
-
 	type TemplateModule = Module<Test>;
 	type OwnerToTokenTest = OwnerToToken<Test>;
 	type Balances = balances::Module<Test>;
@@ -279,7 +290,41 @@ mod tests {
     }
 
 	#[test]
-	fn owne_to_token_can_append_values() {
+	fn token_to_approval_can_approve() {
+		with_externalities(&mut new_test_ext(), || {
+			let owner = 1;
+			let origin = Origin::signed(owner);
+			let to = 2;
+			let token_id = 0;
+
+			assert_err!(TemplateModule::approve(origin.clone(), to, token_id), "You do not have access for this token");
+			assert_eq!(TemplateModule::get_approved(token_id), None);
+
+			<TokenToOwner<Test>>::insert(token_id, owner);
+			<OwnerCount<Test>>::insert(owner, 1);
+
+			assert_err!(TemplateModule::approve(origin.clone(), owner, token_id), "Can not approve to yourself");
+			assert_ok!(TemplateModule::approve(origin, to, token_id));
+			assert_eq!(TemplateModule::get_approved(token_id).unwrap(), to);
+		});
+	}
+
+	#[test]
+	fn owner_to_operator_can_set_approval_for_all() {
+		with_externalities(&mut new_test_ext(), || {
+			let owner = 1;
+			let origin = Origin::signed(owner);
+			let to = 2;
+			let approved = true;
+
+			assert_err!(TemplateModule::set_approval_for_all(origin.clone(), owner, approved), "Can not approve to yourself");
+			assert_ok!(TemplateModule::set_approval_for_all(origin, to, approved));
+			assert_eq!(TemplateModule::is_approved_for_all((owner, to)), approved);
+		});
+	}
+
+	#[test]
+	fn owned_to_token_can_append_values() {
 		with_externalities(&mut new_test_ext(), || {
 			OwnerToTokenList::<Test>::append(&0, 1);
 
@@ -335,7 +380,7 @@ mod tests {
 	}
 
 	#[test]
-	fn owne_to_token_can_remove_values() {
+	fn owned_to_token_can_remove_values() {
 		with_externalities(&mut new_test_ext(), || {
 			OwnerToTokenList::<Test>::append(&0, 1);
 			OwnerToTokenList::<Test>::append(&0, 2);
@@ -447,4 +492,3 @@ mod tests {
 		});
 	}
 }
-
