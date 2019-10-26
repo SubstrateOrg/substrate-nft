@@ -65,9 +65,14 @@ pub type DigestItem = generic::DigestItem<Hash>;
 //mod template;
 
 /// Used for the module nft in `./nft.rs`
+//mod kitties;
+
+/// Used for the module nft in `./nft.rs`
 mod nft;
 
 mod linked_item;
+
+mod nft_currency;
 
 
 /// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
@@ -187,6 +192,7 @@ impl system::Trait for Runtime {
 	type Version = Version;
 }
 
+
 parameter_types! {
 	pub const EpochDuration: u64 = EPOCH_DURATION_IN_BLOCKS as u64;
 	pub const ExpectedBlockTime: u64 = MILLISECS_PER_BLOCK;
@@ -268,6 +274,14 @@ impl nft::Trait for Runtime {
 	type Currency = Balances;
 }
 
+// impl kitties::Trait for Runtime {
+// 	type Event = Event;
+// 	type KittyIndex = u32;
+// 	type Currency = Balances;
+// 	//type Nft = Nft;
+	
+// }
+
 construct_runtime!(
 	pub enum Runtime where
 		Block = Block,
@@ -285,6 +299,8 @@ construct_runtime!(
 		//TemplateModule: template::{Module, Call, Storage, Event<T>},
 		// Substrate NFT module
 		Nft: nft::{Module, Storage, Call, Config, Event<T>},
+		// Substrate Kitties module
+		//Kitties: kitties::{Module, Storage, Call, Event<T>},
 	}
 );
 
