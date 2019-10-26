@@ -97,7 +97,7 @@ decl_module! {
 		//fn deposit_event<T>() = default;
 		fn deposit_event() = default;
 
-		fn approve(origin, to: T::AccountId, token_id: T::TokenId) {
+		fn approve(origin, to:  Option<T::AccountId>, token_id: T::TokenId) {
 			let sender = ensure_signed(origin)?;
 
 			Self::do_appove(&sender, &to, &token_id)?;
@@ -141,13 +141,18 @@ decl_module! {
 }
 
 impl<T: Trait> Module<T> {
-	fn do_appove(sender: &T::AccountId, to: &T::AccountId, token_id: &T::TokenId) -> Result {
+	fn do_appove(sender: &T::AccountId, to: &Option<T::AccountId>, token_id: &T::TokenId) -> Result {
 		let owner = Self::owner_of(token_id);
 
-		ensure!(&owner != to, "Can not approve to yourself");
-		ensure!(sender == &owner || Self::is_approved_for_all((owner, sender.clone())), "You do not have access for this token");
+		ensure!(sender == &owner || Self::is_approved_for_all((owner.clone(), sender.clone())), "You do not have access for this token");
 
-		<TokenToApproval<T>>::insert(token_id, to);
+		if let Some(t) = to{
+			ensure!(&owner != t, "Can not approve to yourself");
+			<TokenToApproval<T>>::insert(token_id, t.clone());
+		} else {
+			<TokenToApproval<T>>::remove(token_id);
+		}
+
 
 		Ok(())
 	}
@@ -162,7 +167,7 @@ decl_event!(
 		AccountId = <T as system::Trait>::AccountId,
 		TokenId = <T as Trait>::TokenId,
 	{
-		Approval(AccountId, AccountId, TokenId),
+		Approval(AccountId,  Option<AccountId>, TokenId),
 
 		ApprovalForAll(AccountId, AccountId, bool),
 
@@ -297,15 +302,19 @@ mod tests {
 			let to = 2;
 			let token_id = 0;
 
-			assert_err!(TemplateModule::approve(origin.clone(), to, token_id), "You do not have access for this token");
+			assert_err!(TemplateModule::approve(origin.clone(), Some(to), token_id), "You do not have access for this token");
 			assert_eq!(TemplateModule::get_approved(token_id), None);
 
 			<TokenToOwner<Test>>::insert(token_id, owner);
 			<OwnerCount<Test>>::insert(owner, 1);
 
-			assert_err!(TemplateModule::approve(origin.clone(), owner, token_id), "Can not approve to yourself");
-			assert_ok!(TemplateModule::approve(origin, to, token_id));
+			assert_err!(TemplateModule::approve(origin.clone(), Some(owner), token_id), "Can not approve to yourself");
+			assert_ok!(TemplateModule::approve(origin.clone(), Some(to), token_id));
 			assert_eq!(TemplateModule::get_approved(token_id).unwrap(), to);
+
+			// should remove approve with appove to None
+			assert_ok!(TemplateModule::approve(origin, None, token_id));
+			assert_eq!(TemplateModule::get_approved(token_id), None);
 		});
 	}
 
