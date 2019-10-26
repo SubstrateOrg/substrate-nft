@@ -118,8 +118,10 @@ decl_module! {
 		fn transfer_from(origin, from: T::AccountId, to: T::AccountId, token_id: T::TokenId) -> Result {
 			let sender = ensure_signed(origin)?;
 			let token_owner = Self::owner_of(token_id);
+			ensure!(from == token_owner, "not token owner");
 			let approved_account = Self::get_approved(token_id);
-			let is_approved_or_owner = from == token_owner || Some(from.clone()) == approved_account || Self::is_approved_for_all((sender.clone(), from.clone()));
+			let is_approved_or_owner = sender == token_owner || Some(sender.clone()) == approved_account 
+									|| Self::is_approved_for_all((from.clone(), sender.clone()));
 			ensure!(is_approved_or_owner, "You do not own this token auth");
 
 			// do transfer
@@ -468,7 +470,7 @@ mod tests {
 				<TokenToOwner<Test>>::insert(token_id2, from2);
 				<OwnerCount<Test>>::insert(from2, 1);
 				<TokenToApproval<Test>>::insert(token_id2, token_approve_account);
-				assert_ok!(TemplateModule::transfer_from(Origin::signed(from2), token_approve_account, to2, token_id2));
+				assert_ok!(TemplateModule::transfer_from(Origin::signed(token_approve_account), from2, to2, token_id2));
 			}
 
 			{
@@ -480,7 +482,7 @@ mod tests {
 				<TokenToOwner<Test>>::insert(token_id3, from3);
 				<OwnerCount<Test>>::insert(from3, 1);
 				<OwnerToOperator<Test>>::insert((from3, account_approve_account), true);
-				assert_ok!(TemplateModule::transfer_from(Origin::signed(from3), account_approve_account, to3, token_id3));
+				assert_ok!(TemplateModule::transfer_from(Origin::signed(account_approve_account), from3, to3, token_id3));
 			}
 		});
 	}
