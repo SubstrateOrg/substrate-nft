@@ -10,10 +10,16 @@
 use support::{decl_module, decl_storage, decl_event, Parameter, StorageMap, StorageValue, 
 	dispatch::Result, ensure, traits::Currency
 };
-use sr_primitives::traits::{SimpleArithmetic, Bounded, Member, Zero, CheckedSub, CheckedAdd};
+use sr_primitives::{
+	traits::{SimpleArithmetic, Bounded, Member, Zero, CheckedSub, CheckedAdd},
+	weights::SimpleDispatchInfo
+};
 use system::ensure_signed;
+
 use rstd::vec::Vec;
 use crate::linked_item::{LinkedList, LinkedItem};
+use crate::nft_currency::{NFTCurrency};
+
 
 /// The module's configuration trait.
 pub trait Trait: system::Trait {
@@ -97,46 +103,63 @@ decl_module! {
 		//fn deposit_event<T>() = default;
 		fn deposit_event() = default;
 
+		#[weight = SimpleDispatchInfo::FixedNormal(1_000_000)]
 		fn approve(origin, to:  Option<T::AccountId>, token_id: T::TokenId) {
 			let sender = ensure_signed(origin)?;
 
-			Self::do_appove(&sender, &to, &token_id)?;
+			//Self::do_appove(&sender, &to, &token_id)?;
+			<Self as NFTCurrency<_>>::approve(&sender, to.clone(), token_id)?;
 
 			Self::deposit_event(RawEvent::Approval(sender, to, token_id));
 		}
 
+		#[weight = SimpleDispatchInfo::FixedNormal(1_000_000)]
 		fn set_approval_for_all(origin, to: T::AccountId, approved: bool) {
 			let sender = ensure_signed(origin)?;
-			ensure!(sender != to, "Can not approve to yourself");
 
-			Self::do_appove_for_all(&sender, &to, approved);
+			// ensure!(sender != to, "Can not approve to yourself");
+			// Self::do_appove_for_all(&sender, &to, approved);
+
+			<Self as NFTCurrency<_>>::set_approval_for_all(&sender, to.clone(), approved)?;
 
 			Self::deposit_event(RawEvent::ApprovalForAll(sender, to, approved));
 		}
 
 		// transfer
+		#[weight = SimpleDispatchInfo::FixedNormal(1_000_000)]
 		fn transfer_from(origin, from: T::AccountId, to: T::AccountId, token_id: T::TokenId) -> Result {
 			let sender = ensure_signed(origin)?;
-			let token_owner = Self::owner_of(token_id);
-			ensure!(from == token_owner, "not token owner");
-			let approved_account = Self::get_approved(token_id);
-			let is_approved_or_owner = sender == token_owner || Some(sender.clone()) == approved_account 
-									|| Self::is_approved_for_all((from.clone(), sender.clone()));
-			ensure!(is_approved_or_owner, "You do not own this token auth");
 
-			// do transfer
-			Self::do_transfer(&token_owner, &to, token_id)?;
-			Self::deposit_event(RawEvent::Transfer(sender, to, token_id));
+			// let token_owner = Self::owner_of(token_id);
+			// ensure!(from == token_owner, "not token owner");
+			// let approved_account = Self::get_approved(token_id);
+			// let is_approved_or_owner = sender == token_owner || Some(sender.clone()) == approved_account 
+			// 						|| Self::is_approved_for_all((from.clone(), sender.clone()));
+			// ensure!(is_approved_or_owner, "You do not own this token auth");
+
+			// // do transfer
+			// Self::do_transfer(&token_owner, &to, token_id)?;
+			// Self::deposit_event(RawEvent::Transfer(sender, to, token_id));
+
+			<Self as NFTCurrency<_>>::transfer_from(&sender, from, to, token_id)?;
+
 			Ok(())
 		}
 
 		// safe transfer
+		#[weight = SimpleDispatchInfo::FixedNormal(1_000_000)]
 		fn safe_transfer_from(origin, from: T::AccountId, to: T::AccountId, token_id: T::TokenId) -> Result {
+
+			let sender = ensure_signed(origin)?;
+
 			// check to account balance is_zero
-			let balances = T::Currency::free_balance(&to);
-            ensure!(!balances.is_zero(), "to account balances is zero");
-			// transfer
-			Self::transfer_from(origin, from, to, token_id)?;
+			// let balances = T::Currency::free_balance(&to);
+            // ensure!(!balances.is_zero(), "to account balances is zero");
+			// // transfer
+			// Self::transfer_from(origin, from, to, token_id)?;
+
+			<Self as NFTCurrency<_>>::safe_transfer_from(&sender, from, to, token_id)?;
+			
 			Ok(())
 		}
 	}
@@ -209,6 +232,108 @@ impl<T: Trait> Module<T> {
 		<TokenToApproval<T>>::remove(token_id);
         Ok(())
     }
+}
+
+
+impl<T: Trait> NFTCurrency<T::AccountId> for Module<T> {
+
+	type TokenId = T::TokenId;
+
+	type Currency= T::Currency;
+
+	fn symbol() -> Vec<u8> {
+		Self::symbol()
+	}
+
+	fn name() -> Vec<u8> {
+		Self::name()
+	}
+
+	fn token_uri(token_id: Self::TokenId) -> Vec<u8> {
+		Self::token_uri(token_id)
+	}
+
+	fn owner_of(token_id: Self::TokenId) -> T::AccountId {
+		Self::owner_of(token_id)
+	}
+
+	fn balance_of(account: T::AccountId) -> Self::TokenId {
+		Self::balance_of(account)
+	}
+	
+	fn get_approved(token_id: Self::TokenId) -> Option<T::AccountId> {
+		Self::get_approved(token_id)
+	}
+
+	fn is_approved_for_all(account_approved: (T::AccountId, T::AccountId)) -> bool {
+		Self::is_approved_for_all(account_approved)
+	}
+
+	fn total_supply() -> Self::TokenId {
+		Self::total_supply()
+	}
+
+	fn owner_to_token(account_token: (T::AccountId, Option<Self::TokenId>)) -> Option<LinkedItem<Self::TokenId>> {
+		Self::owner_to_token(account_token)
+	}
+
+
+	fn approve(
+		who: &T::AccountId, 
+		to:  Option<T::AccountId>, 
+		token_id: Self::TokenId
+	) -> Result {
+		Self::do_appove(who, &to, &token_id)
+	}
+
+	fn set_approval_for_all(
+		who: &T::AccountId, 
+		to: T::AccountId, 
+		approved: bool
+	) -> Result {
+		ensure!(who != &to, "Can not approve to yourself");
+		Self::do_appove_for_all(who, &to, approved);
+		Ok(())
+	}
+
+	// transfer
+	fn transfer_from(
+		who: &T::AccountId, 
+		from: T::AccountId, 
+		to: T::AccountId, 
+		token_id: Self::TokenId
+	) -> Result {
+		let token_owner = Self::owner_of(token_id);
+		ensure!(from == token_owner, "not token owner");
+		let approved_account = Self::get_approved(token_id);
+		let is_approved_or_owner = who == &token_owner || Some(who.clone()) == approved_account || Self::is_approved_for_all((from.clone(), who.clone()));
+		ensure!(is_approved_or_owner, "You do not own this token auth");
+
+		// do transfer
+		Self::do_transfer(&token_owner, &to, token_id)
+	}
+
+	// safe transfer
+	fn safe_transfer_from(
+		who: &T::AccountId, 
+		from: T::AccountId, 
+		to: T::AccountId, 
+		token_id: Self::TokenId
+	) -> Result {
+		let balances = T::Currency::free_balance(&to);
+		ensure!(!balances.is_zero(), "to account balances is zero");
+		// transfer
+
+		//the same with transfer_from
+		let token_owner = Self::owner_of(token_id);
+		ensure!(from == token_owner, "not token owner");
+		let approved_account = Self::get_approved(token_id);
+		let is_approved_or_owner = who == &token_owner || Some(who.clone()) == approved_account || Self::is_approved_for_all((from.clone(), who.clone()));
+		ensure!(is_approved_or_owner, "You do not own this token auth");
+
+		// do transfer
+		Self::do_transfer(&token_owner, &to, token_id)
+	}
 }
 
 /// tests for this module
