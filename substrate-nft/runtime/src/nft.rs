@@ -12,8 +12,10 @@ use support::{decl_module, decl_storage, decl_event, Parameter, StorageMap, Stor
 };
 use sr_primitives::traits::{SimpleArithmetic, Bounded, Member, Zero, CheckedSub, CheckedAdd};
 use system::ensure_signed;
+
 use rstd::vec::Vec;
 use crate::linked_item::{LinkedList, LinkedItem};
+
 
 /// The module's configuration trait.
 pub trait Trait: system::Trait {
