@@ -68,11 +68,6 @@ pub type DigestItem = generic::DigestItem<Hash>;
 //mod kitties;
 
 /// Used for the module nft in `./nft.rs`
-mod nft;
-
-mod linked_item;
-
-mod nft_currency;
 
 
 /// Opaque types. These are used by the CLI to instantiate machinery that don't need to know

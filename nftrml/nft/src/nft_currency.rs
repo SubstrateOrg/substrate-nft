@@ -1,14 +1,11 @@
-
 use rstd::{result};
 use rstd::vec::Vec;
-use support::{Parameter,  traits::Currency
-};
-use sr_primitives::traits::{SimpleArithmetic, Bounded, Member, Zero, CheckedSub, CheckedAdd};
+use support::{Parameter,  traits::Currency};
+use sr_primitives::traits::{SimpleArithmetic, Bounded, Member};
 
-use crate::linked_item::{LinkedList, LinkedItem};
+use crate::linked_item::{LinkedItem};
 
 pub trait NFTCurrency<AccountId> {
-	//type TokenId: Parameter + Member + SimpleArithmetic + Bounded + Default + Copy;
 	type TokenId: Parameter + Member + SimpleArithmetic + Bounded + Default + Copy + Into<u64>;
 
 	type Currency: Currency<AccountId>;
@@ -30,7 +27,7 @@ pub trait NFTCurrency<AccountId> {
 	fn total_supply() -> Self::TokenId;
 
 
-	fn owner_to_token(account_token: (AccountId, Option<Self::TokenId>)) -> Option<LinkedItem<Self::TokenId>>;//Option<TokenLinkedItem<T>>
+	fn owner_to_token(account_token: (AccountId, Option<Self::TokenId>)) -> Option<LinkedItem<Self::TokenId>>;
 
 
 	fn approve(

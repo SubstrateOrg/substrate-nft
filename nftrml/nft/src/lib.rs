@@ -1,3 +1,6 @@
+
+#![cfg_attr(not(feature = "std"), no_std)]
+
 /// A runtime module template with necessary imports
 
 /// Feel free to remove or edit this file as needed.
@@ -7,6 +10,8 @@
 
 /// For more guidance on Substrate modules, see the example module
 /// https://github.com/paritytech/substrate/blob/master/srml/example/src/lib.rs
+
+use rstd::prelude::*;
 use support::{decl_module, decl_storage, decl_event, Parameter, StorageMap, StorageValue, 
 	dispatch::Result, ensure, traits::Currency
 };
@@ -17,8 +22,12 @@ use sr_primitives::{
 use system::ensure_signed;
 
 use rstd::vec::Vec;
-use crate::linked_item::{LinkedList, LinkedItem};
-use crate::nft_currency::{NFTCurrency};
+
+pub mod linked_item;
+use linked_item::{LinkedItem, LinkedList};
+
+pub mod nft_currency;
+use nft_currency::{NFTCurrency};
 
 
 /// The module's configuration trait.

@@ -2047,6 +2047,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "nftrml-nft"
+version = "0.0.1"
+dependencies = [
+ "parity-scale-codec 1.0.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "safe-mix 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 1.0.99 (registry+https://github.com/rust-lang/crates.io-index)",
+ "sr-io 2.0.0 (git+https://github.com/paritytech/substrate.git?rev=ac6a2a783f0e1f4a814cf2add40275730cd41be1)",
+ "sr-primitives 2.0.0 (git+https://github.com/paritytech/substrate.git?rev=ac6a2a783f0e1f4a814cf2add40275730cd41be1)",
+ "sr-std 2.0.0 (git+https://github.com/paritytech/substrate.git?rev=ac6a2a783f0e1f4a814cf2add40275730cd41be1)",
+ "sr-version 2.0.0 (git+https://github.com/paritytech/substrate.git?rev=ac6a2a783f0e1f4a814cf2add40275730cd41be1)",
+ "srml-balances 2.0.0 (git+https://github.com/paritytech/substrate.git?rev=ac6a2a783f0e1f4a814cf2add40275730cd41be1)",
+ "srml-support 2.0.0 (git+https://github.com/paritytech/substrate.git?rev=ac6a2a783f0e1f4a814cf2add40275730cd41be1)",
+ "srml-system 2.0.0 (git+https://github.com/paritytech/substrate.git?rev=ac6a2a783f0e1f4a814cf2add40275730cd41be1)",
+ "srml-timestamp 2.0.0 (git+https://github.com/paritytech/substrate.git?rev=ac6a2a783f0e1f4a814cf2add40275730cd41be1)",
+ "substrate-primitives 2.0.0 (git+https://github.com/paritytech/substrate.git?rev=ac6a2a783f0e1f4a814cf2add40275730cd41be1)",
+]
+
+[[package]]
 name = "nix"
 version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3900,6 +3918,7 @@ dependencies = [
 name = "substrate-nft-runtime"
 version = "2.0.0"
 dependencies = [
+ "nftrml-nft 0.0.1",
  "parity-scale-codec 1.0.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "safe-mix 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.99 (registry+https://github.com/rust-lang/crates.io-index)",

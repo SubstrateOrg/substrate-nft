@@ -23,6 +23,7 @@ std = [
     'safe-mix/std',
     'offchain-primitives/std',
     'substrate-session/std',
+    'nft/std',
 ]
 [build-dependencies.wasm-builder-runner]
 package = 'substrate-wasm-builder-runner'
@@ -33,6 +34,11 @@ authors = ['Warhol']
 edition = '2018'
 name = 'substrate-nft-runtime'
 version = '2.0.0'
+
+
+[dependencies]
+nft = { package = "nftrml-nft", path = "../nftrml/nft", default-features = false }
+
 [dependencies.babe]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
