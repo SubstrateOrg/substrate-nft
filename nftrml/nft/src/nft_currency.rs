@@ -29,20 +29,21 @@ pub trait NFTCurrency<AccountId> {
 
 	fn owner_to_token(account_token: (AccountId, Option<Self::TokenId>)) -> Option<LinkedItem<Self::TokenId>>;
 
-
+	/// approve
 	fn approve(
 		who: &AccountId, 
 		to:  Option<AccountId>, 
 		token_id: Self::TokenId
 	) -> result::Result<(), &'static str>;
 
+	/// set_approval_for_all
 	fn set_approval_for_all(
 		who: &AccountId, 
 		to: AccountId, 
 		approved: bool
 	) -> result::Result<(), &'static str>;
 
-	// transfer
+	/// transfer
 	fn transfer_from(
 		who: &AccountId, 
 		from: AccountId, 
@@ -50,7 +51,7 @@ pub trait NFTCurrency<AccountId> {
 		token_id: Self::TokenId
 	) -> result::Result<(), &'static str>;
 
-	// safe transfer
+	/// safe transfer
 	fn safe_transfer_from(
 		who: &AccountId, 
 		from: AccountId, 

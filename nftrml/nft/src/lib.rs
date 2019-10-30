@@ -54,13 +54,10 @@ decl_storage! {
 
 		//#region ERC-721 metadata extension
 
-		/// 代币符号，默认NFT，Bytes存储
 		pub Symbol get(symbol)  config(): Vec<u8>;
 
-		/// 代币名称，默认Non-Fungible Token，Bytes存储
 		pub Name get(name)  config(): Vec<u8>;
 
-		/// 代币元数据uri
 		pub TokenURI get(token_uri): map T::TokenId => Vec<u8>;
 
 		//#endregion
@@ -68,35 +65,38 @@ decl_storage! {
 
 		//#region ERC-721 compliant contract
 
-		/// TokenId到账户的Map，用于保存、查找和修改Token持有人
+		/// TokenId => TokenOwner
 		pub TokenToOwner get(owner_of): map T::TokenId => T::AccountId;
 
-		/// 账户到余额的Map，用于保存和查询账户持有Token数量
+		/// TokenOwner => TokenCount
 		pub OwnerCount get(balance_of): map T::AccountId => T::TokenId;
 
-		/// Token到授权账户的Map，用于保存和查询对单个Token的授权
+		/// TokenId =>  Account for Approval
 		pub TokenToApproval get(get_approved): map T::TokenId => Option<T::AccountId>;
 
-		/// 一个账户对另一个账户是否授权的Map，用于保存和查询对一个账户对另一个账户的授权
+		/// (OwnerAccountId, ApprovalAccountId) =>  isApproval
 		pub OwnerToOperator get(is_approved_for_all): map (T::AccountId, T::AccountId) => bool;
 
-		//#endregion ERC721标准
-
-
-		//#region ERC-721 enumeration extension
-		/// Token总发行量
-		pub TotalSupply get(total_supply): T::TokenId;
-
-		/// TokenId即TokenIndex，无需获取
-		//pub TokenByIndex get(token_by_index): T::TokenId => T::TokenId;
-
-		/// TokenId即TokenIndex，无需获取
-		//pub TokenOfOwnerByIndex get(token_of_owner_by_index): map (T::AccountId, T::TokenId) => T::TokenId;
 		//#endregion
 
 
-		//#region 其他索引
-		/// 持有人和持有Token到链表的Map，用于查询持有人下的所有Token，并支持O(1)复杂度的修改持有人
+		//#region ERC-721 enumeration extension
+
+		/// total supply of the token
+		pub TotalSupply get(total_supply): T::TokenId;
+
+		/// TokenId is token index
+		//pub TokenByIndex get(token_by_index): T::TokenId => T::TokenId;
+
+		/// TokenId is token index
+		//pub TokenOfOwnerByIndex get(token_of_owner_by_index): map (T::AccountId, T::TokenId) => T::TokenId;
+
+		//#endregion
+
+
+		//#region Other Index
+
+		/// Owner token linked list, for fast enumeration and transfer
 		pub OwnerToToken get(owner_to_token): map (T::AccountId, Option<T::TokenId>) => Option<TokenLinkedItem<T>>;
 
 		//endregion
@@ -112,22 +112,20 @@ decl_module! {
 		//fn deposit_event<T>() = default;
 		fn deposit_event() = default;
 
+		/// approve another account to manage a token of your account
 		#[weight = SimpleDispatchInfo::FixedNormal(1_000_000)]
 		fn approve(origin, to:  Option<T::AccountId>, token_id: T::TokenId) {
 			let sender = ensure_signed(origin)?;
 
-			//Self::do_appove(&sender, &to, &token_id)?;
 			<Self as NFTCurrency<_>>::approve(&sender, to.clone(), token_id)?;
 
 			Self::deposit_event(RawEvent::Approval(sender, to, token_id));
 		}
 
+		/// approve another account to manage all tokens of your account
 		#[weight = SimpleDispatchInfo::FixedNormal(1_000_000)]
 		fn set_approval_for_all(origin, to: T::AccountId, approved: bool) {
 			let sender = ensure_signed(origin)?;
-
-			// ensure!(sender != to, "Can not approve to yourself");
-			// Self::do_appove_for_all(&sender, &to, approved);
 
 			<Self as NFTCurrency<_>>::set_approval_for_all(&sender, to.clone(), approved)?;
 
@@ -138,17 +136,6 @@ decl_module! {
 		#[weight = SimpleDispatchInfo::FixedNormal(1_000_000)]
 		fn transfer_from(origin, from: T::AccountId, to: T::AccountId, token_id: T::TokenId) -> Result {
 			let sender = ensure_signed(origin)?;
-
-			// let token_owner = Self::owner_of(token_id);
-			// ensure!(from == token_owner, "not token owner");
-			// let approved_account = Self::get_approved(token_id);
-			// let is_approved_or_owner = sender == token_owner || Some(sender.clone()) == approved_account 
-			// 						|| Self::is_approved_for_all((from.clone(), sender.clone()));
-			// ensure!(is_approved_or_owner, "You do not own this token auth");
-
-			// // do transfer
-			// Self::do_transfer(&token_owner, &to, token_id)?;
-			// Self::deposit_event(RawEvent::Transfer(sender, to, token_id));
 
 			<Self as NFTCurrency<_>>::transfer_from(&sender, from, to, token_id)?;
 
@@ -161,12 +148,6 @@ decl_module! {
 
 			let sender = ensure_signed(origin)?;
 
-			// check to account balance is_zero
-			// let balances = T::Currency::free_balance(&to);
-            // ensure!(!balances.is_zero(), "to account balances is zero");
-			// // transfer
-			// Self::transfer_from(origin, from, to, token_id)?;
-
 			<Self as NFTCurrency<_>>::safe_transfer_from(&sender, from, to, token_id)?;
 			
 			Ok(())
@@ -174,7 +155,23 @@ decl_module! {
 	}
 }
 
+
+decl_event!(
+	pub enum Event<T> where
+		AccountId = <T as system::Trait>::AccountId,
+		TokenId = <T as Trait>::TokenId,
+	{
+		Approval(AccountId,  Option<AccountId>, TokenId),
+
+		ApprovalForAll(AccountId, AccountId, bool),
+
+		Transfer(AccountId, AccountId, TokenId),
+	}
+);
+
+
 impl<T: Trait> Module<T> {
+
 	fn do_appove(sender: &T::AccountId, to: &Option<T::AccountId>, token_id: &T::TokenId) -> Result {
 		let owner = Self::owner_of(token_id);
 
@@ -194,22 +191,7 @@ impl<T: Trait> Module<T> {
 	fn do_appove_for_all(owner: &T::AccountId, to: &T::AccountId, approved: bool) {
 		<OwnerToOperator<T>>::insert((owner.clone(), to.clone()), approved);
 	}
-}
 
-decl_event!(
-	pub enum Event<T> where
-		AccountId = <T as system::Trait>::AccountId,
-		TokenId = <T as Trait>::TokenId,
-	{
-		Approval(AccountId,  Option<AccountId>, TokenId),
-
-		ApprovalForAll(AccountId, AccountId, bool),
-
-		Transfer(AccountId, AccountId, TokenId),
-	}
-);
-
-impl<T: Trait> Module<T> {
 	fn do_transfer(from: &T::AccountId, to: &T::AccountId, token_id: T::TokenId) -> Result {
 		// update balance
 		let from_balance = Self::balance_of(from);
@@ -243,7 +225,7 @@ impl<T: Trait> Module<T> {
     }
 }
 
-
+/// impl NFTCurrency Module
 impl<T: Trait> NFTCurrency<T::AccountId> for Module<T> {
 
 	type TokenId = T::TokenId;
@@ -285,7 +267,6 @@ impl<T: Trait> NFTCurrency<T::AccountId> for Module<T> {
 	fn owner_to_token(account_token: (T::AccountId, Option<Self::TokenId>)) -> Option<LinkedItem<Self::TokenId>> {
 		Self::owner_to_token(account_token)
 	}
-
 
 	fn approve(
 		who: &T::AccountId, 
@@ -417,7 +398,7 @@ mod tests {
 		type Event = ();
 		type Currency = balances::Module<Test>;
 	}
-	type TemplateModule = Module<Test>;
+	type NftModule = Module<Test>;
 	type OwnerToTokenTest = OwnerToToken<Test>;
 	type Balances = balances::Module<Test>;
 
@@ -438,19 +419,19 @@ mod tests {
 			let to = 2;
 			let token_id = 0;
 
-			assert_err!(TemplateModule::approve(origin.clone(), Some(to), token_id), "You do not have access for this token");
-			assert_eq!(TemplateModule::get_approved(token_id), None);
+			assert_err!(NftModule::approve(origin.clone(), Some(to), token_id), "You do not have access for this token");
+			assert_eq!(NftModule::get_approved(token_id), None);
 
 			<TokenToOwner<Test>>::insert(token_id, owner);
 			<OwnerCount<Test>>::insert(owner, 1);
 
-			assert_err!(TemplateModule::approve(origin.clone(), Some(owner), token_id), "Can not approve to yourself");
-			assert_ok!(TemplateModule::approve(origin.clone(), Some(to), token_id));
-			assert_eq!(TemplateModule::get_approved(token_id).unwrap(), to);
+			assert_err!(NftModule::approve(origin.clone(), Some(owner), token_id), "Can not approve to yourself");
+			assert_ok!(NftModule::approve(origin.clone(), Some(to), token_id));
+			assert_eq!(NftModule::get_approved(token_id).unwrap(), to);
 
 			// should remove approve with appove to None
-			assert_ok!(TemplateModule::approve(origin, None, token_id));
-			assert_eq!(TemplateModule::get_approved(token_id), None);
+			assert_ok!(NftModule::approve(origin, None, token_id));
+			assert_eq!(NftModule::get_approved(token_id), None);
 		});
 	}
 
@@ -462,9 +443,9 @@ mod tests {
 			let to = 2;
 			let approved = true;
 
-			assert_err!(TemplateModule::set_approval_for_all(origin.clone(), owner, approved), "Can not approve to yourself");
-			assert_ok!(TemplateModule::set_approval_for_all(origin, to, approved));
-			assert_eq!(TemplateModule::is_approved_for_all((owner, to)), approved);
+			assert_err!(NftModule::set_approval_for_all(origin.clone(), owner, approved), "Can not approve to yourself");
+			assert_ok!(NftModule::set_approval_for_all(origin, to, approved));
+			assert_eq!(NftModule::is_approved_for_all((owner, to)), approved);
 		});
 	}
 
@@ -592,7 +573,7 @@ mod tests {
 				OwnerToTokenList::<Test>::append(&from1, token_id1);
 				<TokenToOwner<Test>>::insert(token_id1, from1);
 				<OwnerCount<Test>>::insert(from1, 1);
-				assert_ok!(TemplateModule::transfer_from(Origin::signed(from1), from1, to1, token_id1));
+				assert_ok!(NftModule::transfer_from(Origin::signed(from1), from1, to1, token_id1));
 			}
 
 			{
@@ -604,7 +585,7 @@ mod tests {
 				<TokenToOwner<Test>>::insert(token_id2, from2);
 				<OwnerCount<Test>>::insert(from2, 1);
 				<TokenToApproval<Test>>::insert(token_id2, token_approve_account);
-				assert_ok!(TemplateModule::transfer_from(Origin::signed(token_approve_account), from2, to2, token_id2));
+				assert_ok!(NftModule::transfer_from(Origin::signed(token_approve_account), from2, to2, token_id2));
 			}
 
 			{
@@ -616,7 +597,7 @@ mod tests {
 				<TokenToOwner<Test>>::insert(token_id3, from3);
 				<OwnerCount<Test>>::insert(from3, 1);
 				<OwnerToOperator<Test>>::insert((from3, account_approve_account), true);
-				assert_ok!(TemplateModule::transfer_from(Origin::signed(account_approve_account), from3, to3, token_id3));
+				assert_ok!(NftModule::transfer_from(Origin::signed(account_approve_account), from3, to3, token_id3));
 			}
 		});
 	}
@@ -633,7 +614,7 @@ mod tests {
 			<TokenToOwner<Test>>::insert(token_id, from);
 			<OwnerCount<Test>>::insert(from, 1);
 			assert_eq!(Balances::free_balance(to), 20);
-			assert_ok!(TemplateModule::safe_transfer_from(origin, from, to, token_id));
+			assert_ok!(NftModule::safe_transfer_from(origin, from, to, token_id));
 		});
 	}
 }
