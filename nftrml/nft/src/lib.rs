@@ -12,7 +12,7 @@
 /// https://github.com/paritytech/substrate/blob/master/srml/example/src/lib.rs
 
 use rstd::prelude::*;
-use support::{decl_module, decl_storage, decl_event, Parameter, StorageMap,  
+use support::{decl_module, decl_storage, decl_event, Parameter, StorageMap, StorageValue,
 	dispatch::Result, ensure, traits::Currency
 };
 use sr_primitives::{
@@ -54,9 +54,9 @@ decl_storage! {
 
 		//#region ERC-721 metadata extension
 
-		pub Symbol get(symbol)  config(): Vec<u8>;
+		pub Symbol get(symbol) config(): Vec<u8>;
 
-		pub Name get(name)  config(): Vec<u8>;
+		pub Name get(name) config(): Vec<u8>;
 
 		pub TokenURI get(token_uri): map T::TokenId => Vec<u8>;
 
@@ -132,7 +132,7 @@ decl_module! {
 			Self::deposit_event(RawEvent::ApprovalForAll(sender, to, approved));
 		}
 
-		// transfer
+		/// transfer token
 		#[weight = SimpleDispatchInfo::FixedNormal(1_000_000)]
 		fn transfer_from(origin, from: T::AccountId, to: T::AccountId, token_id: T::TokenId) {
 			let sender = ensure_signed(origin)?;
@@ -142,7 +142,7 @@ decl_module! {
 			Self::deposit_event(RawEvent::Transfer(from, to, token_id));
 		}
 
-		// safe transfer
+		// safe transfer token
 		#[weight = SimpleDispatchInfo::FixedNormal(1_000_000)]
 		fn safe_transfer_from(origin, from: T::AccountId, to: T::AccountId, token_id: T::TokenId) {
 
@@ -151,6 +151,13 @@ decl_module! {
 			<Self as NFTCurrency<_>>::safe_transfer_from(&sender, &from, &to, token_id)?;
 			
 			Self::deposit_event(RawEvent::Transfer(from, to, token_id));
+		}
+
+		/// create token for your self, maybe for test
+		fn create_token(origin) {
+			let sender = ensure_signed(origin)?;
+
+			Self::do_create_token(&sender)?;
 		}
 	}
 }
@@ -223,6 +230,22 @@ impl<T: Trait> Module<T> {
 		<TokenToApproval<T>>::remove(token_id);
         Ok(())
     }
+
+	fn do_create_token(owner: &T::AccountId) -> Result {
+		let token_id = Self::total_supply();
+		if token_id == T::TokenId::max_value() {
+			return Err("TokenId overflow");
+		}
+		let balance =Self::balance_of(owner);
+
+		<TokenToOwner<T>>::insert(token_id, owner);
+		<OwnerCount<T>>::insert(owner, balance + 1.into());
+		<TotalSupply<T>>::put(token_id + 1.into());
+
+		<OwnerToTokenList<T>>::append(owner, token_id); 
+
+		Ok(()) 
+	}
 }
 
 /// impl NFTCurrency Module
@@ -414,8 +437,41 @@ mod tests {
         t.into()
     }
 
+
 	#[test]
-	fn token_to_approval_can_approve() {
+	fn should_create_token() {
+		with_externalities(&mut new_test_ext(), || {
+			let owner = 1;
+			let origin = Origin::signed(owner);
+			
+			let old_total_supply = NftModule::total_supply();
+			let old_balance = NftModule::balance_of(owner);
+
+			assert_eq!(OwnerToTokenTest::get(&(owner, Some(0))), None);
+
+			assert_ok!(NftModule::create_token(origin.clone()));
+
+			let new_total_supply = NftModule::total_supply();
+			let new_balance = NftModule::balance_of(owner);
+
+			assert_eq!(old_total_supply + 1, new_total_supply);
+			assert_eq!(old_balance + 1, new_balance);
+			assert_eq!(NftModule::owner_of(old_total_supply), owner);
+
+			assert_eq!(OwnerToTokenTest::get(&(owner, None)), Some(TokenLinkedItem::<Test> {
+				prev: Some(0),
+				next: Some(0),
+			}));
+
+			assert_eq!(OwnerToTokenTest::get(&(owner, Some(0))), Some(TokenLinkedItem::<Test> {
+				prev: None,
+				next: None,
+			}));
+		});
+	}
+
+	#[test]
+	fn should_approve() {
 		with_externalities(&mut new_test_ext(), || {
 			let owner = 1;
 			let origin = Origin::signed(owner);
@@ -439,7 +495,7 @@ mod tests {
 	}
 
 	#[test]
-	fn owner_to_operator_can_set_approval_for_all() {
+	fn should_set_approval_for_all() {
 		with_externalities(&mut new_test_ext(), || {
 			let owner = 1;
 			let origin = Origin::signed(owner);
@@ -449,6 +505,114 @@ mod tests {
 			assert_err!(NftModule::set_approval_for_all(origin.clone(), owner, approved), "Can not approve to yourself");
 			assert_ok!(NftModule::set_approval_for_all(origin, to, approved));
 			assert_eq!(NftModule::is_approved_for_all((owner, to)), approved);
+		});
+	}
+
+
+
+	#[test]
+	fn should_transfer_from() {
+		with_externalities(&mut new_test_ext(), || {
+			{
+				let from1 = 1;
+				let to1 = 2;
+				let token_id1 = 1;
+
+				OwnerToTokenList::<Test>::append(&from1, token_id1);
+				<TokenToOwner<Test>>::insert(token_id1, from1);
+				<OwnerCount<Test>>::insert(from1, 1);
+
+				let old_from_balance = NftModule::balance_of(from1);
+				let old_to_balance = NftModule::balance_of(to1);
+
+				assert_ok!(NftModule::transfer_from(Origin::signed(from1), from1, to1, token_id1));
+
+				assert_eq!(NftModule::owner_of(token_id1), to1);
+
+				let new_from_balance = NftModule::balance_of(from1);
+				let new_to_balance = NftModule::balance_of(to1);
+
+				assert_eq!(old_from_balance - 1, new_from_balance);
+				assert_eq!(old_to_balance + 1, new_to_balance);
+			}
+
+			{
+				let from2 = 3;
+				let to2 = 4;
+				let token_id2 = 2;
+				let token_approve_account = 5;
+
+				OwnerToTokenList::<Test>::append(&from2, token_id2);
+				<TokenToOwner<Test>>::insert(token_id2, from2);
+				<OwnerCount<Test>>::insert(from2, 1);
+				<TokenToApproval<Test>>::insert(token_id2, token_approve_account);
+
+				let old_from_balance = NftModule::balance_of(from2);
+				let old_to_balance = NftModule::balance_of(to2);
+
+				assert_ok!(NftModule::transfer_from(Origin::signed(token_approve_account), from2, to2, token_id2));
+
+				assert_eq!(NftModule::owner_of(token_id2), to2);
+
+				let new_from_balance = NftModule::balance_of(from2);
+				let new_to_balance = NftModule::balance_of(to2);
+
+				assert_eq!(old_from_balance - 1, new_from_balance);
+				assert_eq!(old_to_balance + 1, new_to_balance);
+			}
+
+			{
+				let from3 = 6;
+				let to3 = 7;
+				let token_id3 = 3;
+				let account_approve_account = 8;
+				OwnerToTokenList::<Test>::append(&from3, token_id3);
+				<TokenToOwner<Test>>::insert(token_id3, from3);
+				<OwnerCount<Test>>::insert(from3, 1);
+
+				let old_from_balance = NftModule::balance_of(from3);
+				let old_to_balance = NftModule::balance_of(to3);
+
+				<OwnerToOperator<Test>>::insert((from3, account_approve_account), true);
+				assert_ok!(NftModule::transfer_from(Origin::signed(account_approve_account), from3, to3, token_id3));
+
+				assert_eq!(NftModule::owner_of(token_id3), to3);
+
+				let new_from_balance = NftModule::balance_of(from3);
+				let new_to_balance = NftModule::balance_of(to3);
+
+				assert_eq!(old_from_balance - 1, new_from_balance);
+				assert_eq!(old_to_balance + 1, new_to_balance);
+			}
+		});
+	}
+
+	#[test]
+	fn should_safe_transfer_from() {
+		with_externalities(&mut new_test_ext(), || {
+			let from = 9;
+			let origin = Origin::signed(from);
+			let to = 10;
+			let token_id = 4;
+
+			OwnerToTokenList::<Test>::append(&from, token_id);
+			<TokenToOwner<Test>>::insert(token_id, from);
+			<OwnerCount<Test>>::insert(from, 1);
+			assert_eq!(Balances::free_balance(to), 20);
+
+
+			let old_from_balance = NftModule::balance_of(from);
+			let old_to_balance = NftModule::balance_of(to);
+
+			assert_ok!(NftModule::safe_transfer_from(origin, from, to, token_id));
+
+			assert_eq!(NftModule::owner_of(token_id), to);
+
+			let new_from_balance = NftModule::balance_of(from);
+			let new_to_balance = NftModule::balance_of(to);
+
+			assert_eq!(old_from_balance - 1, new_from_balance);
+			assert_eq!(old_to_balance + 1, new_to_balance);
 		});
 	}
 
@@ -565,59 +729,4 @@ mod tests {
 		});
 	}
 
-
-	#[test]
-	fn owne_to_token_can_transfer_from() {
-		with_externalities(&mut new_test_ext(), || {
-			{
-				let from1 = 1;
-				let to1 = 2;
-				let token_id1 = 1;
-				OwnerToTokenList::<Test>::append(&from1, token_id1);
-				<TokenToOwner<Test>>::insert(token_id1, from1);
-				<OwnerCount<Test>>::insert(from1, 1);
-				assert_ok!(NftModule::transfer_from(Origin::signed(from1), from1, to1, token_id1));
-			}
-
-			{
-				let from2 = 3;
-				let to2 = 4;
-				let token_id2 = 2;
-				let token_approve_account = 5;
-				OwnerToTokenList::<Test>::append(&from2, token_id2);
-				<TokenToOwner<Test>>::insert(token_id2, from2);
-				<OwnerCount<Test>>::insert(from2, 1);
-				<TokenToApproval<Test>>::insert(token_id2, token_approve_account);
-				assert_ok!(NftModule::transfer_from(Origin::signed(token_approve_account), from2, to2, token_id2));
-			}
-
-			{
-				let from3 = 6;
-				let to3 = 7;
-				let token_id3 = 3;
-				let account_approve_account = 8;
-				OwnerToTokenList::<Test>::append(&from3, token_id3);
-				<TokenToOwner<Test>>::insert(token_id3, from3);
-				<OwnerCount<Test>>::insert(from3, 1);
-				<OwnerToOperator<Test>>::insert((from3, account_approve_account), true);
-				assert_ok!(NftModule::transfer_from(Origin::signed(account_approve_account), from3, to3, token_id3));
-			}
-		});
-	}
-
-	#[test]
-	fn owne_to_token_can_safe_transfer_from() {
-		with_externalities(&mut new_test_ext(), || {
-			let from = 9;
-			let origin = Origin::signed(from);
-			let to = 10;
-			let token_id = 4;
-
-			OwnerToTokenList::<Test>::append(&from, token_id);
-			<TokenToOwner<Test>>::insert(token_id, from);
-			<OwnerCount<Test>>::insert(from, 1);
-			assert_eq!(Balances::free_balance(to), 20);
-			assert_ok!(NftModule::safe_transfer_from(origin, from, to, token_id));
-		});
-	}
 }

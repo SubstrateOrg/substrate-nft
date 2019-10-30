@@ -2,7 +2,7 @@
 
 SRML-based Substrate node for ERC-721 Non-Fungible Token Standard implementation
 
-# Building
+# Prepare
 
 Install Rust:
 
@@ -15,6 +15,24 @@ Install required tools:
 ```bash
 ./scripts/init.sh
 ```
+
+
+# Test
+
+Test nftrml module:
+
+```bash
+cargo test -p nftrml-nft
+```
+
+Test all crates:
+
+```bash
+cargo test --all
+```
+
+
+# Building
 
 Build all native code:
 
@@ -60,3 +78,20 @@ cargo run -- \
 ```
 
 Additional CLI usage options are available and may be shown by running `cargo run -- --help`.
+
+# Client
+
+Use [Polkadot/Substrate Portal](https://polkadot.js.org) to test the node.
+
+
+Additional types as a JSON file:
+
+```js
+{
+  "TokenId": "u64",
+  "TokenLinkedItem": {
+    "prev": "Option<u64>",
+    "next": "Option<u64>"
+  }
+}
+```
